@@ -1,0 +1,99 @@
+═══════════════════════════════════════════════════════════
+SCRIPTS
+═══════════════════════════════════════════════════════════
+
+
+1. CREATION DES TABLES (geree par Hibernate ddl-auto=update)
+─────────────────────────────────────────────────────────
+
+→ Voir tables.sql pour les CREATE TABLE complets.
+
+
+2. COLONNE SPATIALE — etablissement.geom
+─────────────────────────────────────────
+
+  ALTER TABLE etablissement ADD COLUMN geom GEOMETRY(Point, 4326);
+  UPDATE etablissement SET geom = ST_SetSRID(ST_MakePoint(x, y), 4326)
+    WHERE geom IS NULL;
+
+
+3. INDEX SPATIAUX (GIST)
+─────────────────────────
+
+  CREATE INDEX idx_etablissement_geom ON etablissement USING GIST (geom);
+
+  CREATE INDEX idx_fokontany_polygon_geom
+    ON fokontany USING GIST (ST_SetSRID(ST_GeomFromGeoJSON(polygon), 4326));
+
+
+4. IMPORT DES DONNEES
+─────────────────────
+
+  4.1 Fokontany (GeoJSON → Java → INSERT via Spring Data JPA)
+      Fichier source : quartiers.geojson 
+      Chaque feature.properties contient : fokontany, arrondissement, pcode
+      Le champ geometry est stocke tel quel dans fokontany.polygon (TEXT).
+
+  4.2 Etablissements (CSV → Java → INSERT via Spring Data JPA)
+      Fichier source : etablissements.csv
+      Format : nom,type,note,x,y
+
+      Commande SQL :
+        COPY etablissement(nom, type, note, x, y)
+        FROM '/path/to/etablissements.csv'
+        DELIMITER ','
+        CSV HEADER;
+
+
+5. REQUÊTES SPATIALES
+─────────────────────────────────────────────────────────
+
+  5.1 Etablissements dans un fokontany
+
+    SELECT e.* FROM etablissement e, fokontany f
+    WHERE f.id = :fokontanyId
+    AND ST_Within(e.geom, ST_SetSRID(ST_GeomFromGeoJSON(f.polygon), 4326));
+
+  5.2 Etablissements par type dans un fokontany
+
+    SELECT e.* FROM etablissement e, fokontany f
+    WHERE f.id = :fokontanyId
+    AND e.type = :type
+    AND ST_Within(e.geom, ST_SetSRID(ST_GeomFromGeoJSON(f.polygon), 4326));
+
+  5.3 Recherche par proximite (ST_DWithin)
+
+    SELECT e.* FROM etablissement e
+    WHERE ST_DWithin(
+      CAST(e.geom AS geography),
+      CAST(ST_SetSRID(ST_MakePoint(:x, :y), 4326) AS geography),
+      :radius
+    );
+
+  5.4 Point-in-polygon (trouver le fokontany contenant un point)
+
+    SELECT f.* FROM fokontany f
+    WHERE ST_Within(
+      ST_SetSRID(ST_MakePoint(:x, :y), 4326),
+      ST_SetSRID(ST_GeomFromGeoJSON(f.polygon), 4326)
+    ) LIMIT 1;
+
+  5.5 Comptage des etablissements par fokontany
+
+    SELECT f.id, f.nom, COUNT(e.id) AS cnt
+    FROM fokontany f
+    LEFT JOIN etablissement e
+      ON ST_Contains(ST_SetSRID(ST_GeomFromGeoJSON(f.polygon), 4326), e.geom)
+    GROUP BY f.id, f.nom
+    ORDER BY cnt DESC;
+
+
+6. STATISTIQUES
+────────────────────────────────────
+
+  SELECT COUNT(*)                    FROM etablissement;
+  SELECT AVG(note)                   FROM etablissement;
+  SELECT MIN(note)                   FROM etablissement;
+  SELECT MAX(note)                   FROM etablissement;
+  SELECT COUNT(*) FROM etablissement WHERE type = :type;
+
