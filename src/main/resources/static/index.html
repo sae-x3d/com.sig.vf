@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROJET SIG — Carte</title>
+<link rel="stylesheet" href="/lib/leaflet.css" />
+<link rel="stylesheet" href="/lib/MarkerCluster.css" />
+<link rel="stylesheet" href="/lib/MarkerCluster.Default.css" />
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+.leaflet-interactive { outline: none !important; }
+body { font-family: system-ui, sans-serif; }
+
+nav {
+  background: #2c3e50; color: #fff; display: flex; align-items: center;
+  padding: 0 20px; height: 50px; gap: 24px; position: relative; z-index: 2000;
+}
+nav .brand { font-weight: 700; font-size: 18px; }
+nav a { color: #bbb; text-decoration: none; font-size: 14px; transition: color .15s; }
+nav a:hover, nav a.active { color: #fff; }
+
+#controls {
+  position: absolute; top: 60px; left: 10px; z-index: 1000;
+  background: rgba(255,255,255,.95); padding: 10px 14px; border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.2); display: flex; gap: 8px;
+  align-items: center; flex-wrap: wrap; max-width: 95%;
+}
+#controls label { font-weight: 600; font-size: 13px; color: #555; }
+#controls input, #controls select {
+  padding: 5px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;
+}
+#controls button {
+  padding: 5px 14px; border: none; border-radius: 4px; font-size: 13px;
+  cursor: pointer; background: #3388ff; color: #fff;
+}
+#controls button:hover { background: #2171d6; }
+#controls .btn-secondary { background: #95a5a6; }
+#controls .btn-secondary:hover { background: #7f8c8d; }
+
+#map { height: calc(100vh - 50px); width: 100%; }
+
+#sidebar {
+  position: absolute; top: 50px; right: -400px; width: 380px; height: calc(100vh - 50px);
+  background: #fff; z-index: 999; transition: right .3s ease;
+  box-shadow: -2px 0 10px rgba(0,0,0,.15); overflow-y: auto; padding: 20px;
+}
+#sidebar.open { right: 0; }
+#sidebar h3 { margin-bottom: 6px; }
+#sidebar .meta { color: #777; font-size: 13px; margin-bottom: 12px; }
+#sidebar .close {
+  position: absolute; top: 12px; right: 14px; cursor: pointer; font-size: 22px;
+  color: #999; background: none; border: none;
+}
+#sidebar .close:hover { color: #333; }
+#sidebar .etab-item {
+  padding: 8px 0; border-bottom: 1px solid #eee; font-size: 14px;
+  display: flex; justify-content: space-between;
+}
+#sidebar .etab-item .name { font-weight: 500; }
+#sidebar .etab-item .note { color: #f39c12; font-size: 13px; }
+
+#stats {
+  position: absolute; bottom: 20px; right: 20px; z-index: 1000;
+  background: rgba(255,255,255,.92); padding: 8px 14px; border-radius: 6px;
+  font-size: 13px; box-shadow: 0 1px 5px rgba(0,0,0,.15);
+}
+
+.legend {
+  position: absolute; bottom: 70px; right: 20px; z-index: 1000;
+  background: rgba(255,255,255,.92); padding: 8px 12px; border-radius: 6px;
+  font-size: 13px; box-shadow: 0 1px 5px rgba(0,0,0,.15); cursor: pointer;
+}
+.legend-item { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+.legend-item .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.legend-item .line { width: 20px; height: 3px; border-radius: 2px; display: inline-block; }
+.legend-item.muted { opacity: .35; }
+
+/* Detail modal */
+#detailModal {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,.4); z-index: 9999; align-items: center; justify-content: center;
+}
+#detailModal.open { display: flex; }
+#detailModal .modal-content {
+  background: #fff; border-radius: 12px; padding: 28px; width: 90%; max-width: 520px;
+  max-height: 85vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,.2);
+  position: relative;
+}
+#detailModal .close {
+  position: absolute; top: 10px; right: 14px; cursor: pointer; font-size: 24px;
+  color: #999; background: none; border: none;
+}
+#detailModal .close:hover { color: #333; }
+#detailModal h2 { margin-bottom: 4px; font-size: 20px; }
+#detailModal .detail-type {
+  display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px;
+  color: #fff; margin-bottom: 12px;
+}
+#detailModal .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 14px; margin: 12px 0; }
+#detailModal .info-grid .lbl { color: #888; font-weight: 600; }
+#detailModal .osm-section { margin-top: 14px; padding-top: 14px; border-top: 1px solid #eee; }
+#detailModal .osm-section h4 { font-size: 14px; color: #555; margin-bottom: 8px; }
+#detailModal .osm-section .loading { color: #999; font-style: italic; }
+#detailModal .osm-section .error { color: #e74c3c; font-size: 13px; }
+#detailModal .osm-section .data-item { font-size: 13px; padding: 3px 0; }
+#detailModal .osm-section .data-item .k { color: #888; }
+#detailModal .stars { color: #f39c12; }
+#detailModal .route-btn {
+  display: block; width: 100%; margin-top: 12px; padding: 10px; border: none;
+  border-radius: 8px; background: #27ae60; color: #fff; cursor: pointer;
+  font-size: 14px; font-weight: 600; transition: background .15s;
+}
+#detailModal .route-btn:hover { background: #219a52; }
+#detailModal .route-btn.loading { background: #95a5a6; cursor: wait; }
+
+.route-panel {
+  position: absolute; bottom: 20px; left: 10px; z-index: 1000;
+  background: rgba(255,255,255,.95); padding: 12px 16px; border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.2); font-size: 13px; max-width: 320px;
+  display: none;
+}
+.route-panel.visible { display: block; }
+.route-panel .r-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.route-panel .r-info { color: #555; margin-bottom: 4px; }
+.route-panel .r-clear {
+  margin-top: 6px; padding: 4px 12px; border: none; border-radius: 4px;
+  background: #e74c3c; color: #fff; cursor: pointer; font-size: 12px;
+}
+
+@media (max-width: 700px) {
+  #controls { flex-direction: column; align-items: stretch; }
+  #sidebar { width: 100%; right: -100%; }
+}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">  PROJET SIG</span>
+  <a href="/" class="active">Carte</a>
+  <a href="/statistiques.html">Statistiques</a>
+  <a href="/classement.html">Classement</a>
+  <a href="/proximite.html">Proximité</a>
+  <a href="/gestion.html">Gestion</a>
+</nav>
+
+<div id="controls" >
+  <input id="searchInput" type="text" placeholder="Rechercher un établissement…" style="min-width:180px">
+  <label>Note ≥</label>
+  <select id="noteSelect">
+    <option value="">Toutes</option>
+    <option value="4">4 ★</option>
+    <option value="3">3 ★</option>
+    <option value="2">2 ★</option>
+    <option value="1">1 ★</option>
+  </select>
+  <label>Type</label>
+  <select id="typeSelect">
+    <option value="">Tous</option>
+    <option value="restaurant">Restaurant</option>
+    <option value="hotel">Hôtel</option>
+  </select>
+  <input id="fokonInput" list="fokonList" placeholder="Fokontany…" style="min-width:150px">
+  <datalist id="fokonList"></datalist>
+  <button id="resetBtn">Réinitialiser</button>
+  <button id="satToggle" class="btn-secondary">🛰️ Satellite</button>
+  <button id="locBtn" class="btn-secondary" title="Ma position">📍 Ma position</button>
+</div>
+
+<div id="sidebar">
+  <button class="close" id="sidebarClose">&times;</button>
+  <h3 id="sideTitle"></h3>
+  <div class="meta" id="sideMeta"></div>
+  <div id="sideList"></div>
+</div>
+
+<div id="detailModal">
+  <div class="modal-content">
+    <button class="close" id="modalClose">&times;</button>
+    <h2 id="detName"></h2>
+    <div id="detType" class="detail-type"></div>
+    <div class="info-grid">
+      <span class="lbl">Note</span><span id="detNote" class="stars"></span>
+      <span class="lbl">Fokontany</span><span id="detFoko">—</span>
+      <span class="lbl">Latitude</span><span id="detY"></span>
+      <span class="lbl">Longitude</span><span id="detX"></span>
+    </div>
+    <div class="osm-section">
+      <h4>🌐 Données OpenStreetMap</h4>
+      <div id="osmInfo"><span class="loading">Recherche en cours…</span></div>
+    </div>
+    <button class="route-btn" id="routeBtn">🚗 Itinéraire vers cet établissement</button>
+  </div>
+</div>
+
+<div class="route-panel" id="routePanel">
+  <div class="r-title">🚗 Itinéraire</div>
+  <div class="r-info" id="routeInfo"></div>
+  <button class="r-clear" id="routeClearBtn">✕ Effacer</button>
+</div>
+
+<div id="map"></div>
+<div id="stats">Chargement…</div>
+<div class="legend">
+  <div class="legend-item" data-type="restaurant"><span class="dot" style="background:#e74c3c"></span> Restaurant</div>
+  <div class="legend-item" data-type="hotel"><span class="dot" style="background:#3498db"></span> Hôtel</div>
+  <div class="legend-item" style="margin-top:4px;border-top:1px solid #ddd;padding-top:4px">
+    <span class="line" style="background:#2c3e50"></span> Fokontany
+  </div>
+</div>
+
+<script src="/lib/leaflet.js"></script>
+<script src="/lib/leaflet.markercluster.js"></script>
+<script>
+const map = L.map('map').setView([-18.91, 47.53], 13);
+
+const osm = L.tileLayer('/tiles/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+});
+const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19, attribution: '&copy; Esri'
+});
+let useSat = false;
+osm.addTo(map);
+
+let markersCluster = L.markerClusterGroup({
+  chunkedLoading: true, maxClusterRadius: 50,
+  spiderfyOnMaxZoom: true, showCoverageOnHover: false,
+  iconCreateFunction: function(c) {
+    const count = c.getChildCount();
+    let color = count > 20 ? '#e74c3c' : count > 10 ? '#f39c12' : '#3498db';
+    return L.divIcon({
+      html: '<div style="background:'+color+';color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;border:3px solid rgba(255,255,255,.8);box-shadow:0 1px 4px rgba(0,0,0,.3)">'+count+'</div>',
+      className: '', iconSize: [36, 36], iconAnchor: [18, 18]
+    });
+  }
+});
+map.addLayer(markersCluster);
+
+let fokoLayer = L.geoJSON(null, {
+  style: { color: '#2c3e50', weight: 1.5, fillOpacity: 0.08 },
+  onEachFeature(f, layer) {
+    layer.on({
+      mouseover() {
+        layer.bindTooltip(f.properties.nom, { sticky: true }).openTooltip();
+      },
+      mouseout() {
+        layer.unbindTooltip();
+      },
+
+      click() {
+        showSidebar(f.properties.id, f.properties.nom, f.properties.arrondissement);
+      }
+    });
+  }
+}).addTo(map);
+
+let allMarkersData = [];
+let allFokontany = [];
+let allEtablissements = [];
+let currentEtab = null;
+let routeLine = null;
+let routeStartMarker = null;
+let pickStartMode = false;
+
+const searchInput = document.getElementById('searchInput');
+const noteSelect = document.getElementById('noteSelect');
+const typeSelect = document.getElementById('typeSelect');
+const fokonInput = document.getElementById('fokonInput');
+const statsEl = document.getElementById('stats');
+
+let searchTimeout = null;
+
+function formatNote(note) {
+  const full = '★'.repeat(Math.round(note));
+  const empty = '☆'.repeat(5 - Math.round(note));
+  return full + ' ' + note.toFixed(1);
+}
+
+function createIcon(type) {
+  const color = type === 'restaurant' ? '#e74c3c' : '#3498db';
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);"></div>`,
+    iconSize: [14, 14], iconAnchor: [7, 7]
+  });
+}
+
+function openDetail(e) {
+  document.getElementById('detName').textContent = e.nom;
+  const badge = document.getElementById('detType');
+  badge.textContent = e.type === 'restaurant' ? 'Restaurant' : 'Hôtel';
+  badge.style.background = e.type === 'restaurant' ? '#e74c3c' : '#3498db';
+  document.getElementById('detNote').innerHTML = formatNote(e.note);
+  document.getElementById('detX').textContent = e.x.toFixed(5);
+  document.getElementById('detY').textContent = e.y.toFixed(5);
+  currentEtab = e;
+  document.getElementById('detFoko').textContent = 'Recherche…';
+
+  fetch('/api/fokontany/search?x=' + e.x + '&y=' + e.y)
+    .then(r => r.json())
+    .then(f => { document.getElementById('detFoko').textContent = f.nom + ' (' + f.arrondissement + ')'; })
+    .catch(() => { document.getElementById('detFoko').textContent = '—'; });
+
+  const osmDiv = document.getElementById('osmInfo');
+  osmDiv.innerHTML = '<span class="loading">Recherche en cours…</span>';
+  fetch('/api/osm/search?nom=' + encodeURIComponent(e.nom) + '&y=' + e.y + '&x=' + e.x)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error === 'hors-ligne') {
+        osmDiv.innerHTML = '<span class="error">Hors ligne — données OSM non disponibles.</span>';
+        return;
+      }
+      const el = data.elements?.[0];
+      if (!el || !el.tags) {
+        osmDiv.innerHTML = '<span class="error">Aucune donnée OSM trouvée pour cet établissement.</span>';
+        return;
+      }
+      const t = el.tags;
+      let html = '';
+      if (t['addr:street']) html += '<div class="data-item"><span class="k">Adresse :</span> ' + t['addr:street'] + (t['addr:housenumber'] ? ' ' + t['addr:housenumber'] : '') + '</div>';
+      if (t['addr:city']) html += '<div class="data-item"><span class="k">Ville :</span> ' + t['addr:city'] + '</div>';
+      if (t.phone) html += '<div class="data-item"><span class="k">Téléphone :</span> ' + t.phone + '</div>';
+      if (t.website) html += '<div class="data-item"><span class="k">Site web :</span> <a href="' + t.website + '" target="_blank">' + t.website + '</a></div>';
+      if (t.email) html += '<div class="data-item"><span class="k">Email :</span> ' + t.email + '</div>';
+      if (t.opening_hours) html += '<div class="data-item"><span class="k">Horaires :</span> ' + t.opening_hours + '</div>';
+      if (t.cuisine) html += '<div class="data-item"><span class="k">Cuisine :</span> ' + t.cuisine + '</div>';
+      if (t.stars) html += '<div class="data-item"><span class="k">Étoiles :</span> ' + t.stars + '</div>';
+      if (!html) html = '<span class="error">Aucune information détaillée disponible.</span>';
+      osmDiv.innerHTML = html;
+    })
+    .catch(() => {
+      osmDiv.innerHTML = '<span class="error">Impossible de contacter le serveur.</span>';
+    });
+
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function updateMarkers(data) {
+  markersCluster.clearLayers();
+  const hiddenTypes = getHiddenTypes();
+  const visible = data.filter(e => !hiddenTypes.has(e.type));
+  visible.forEach(e => {
+    const m = L.marker([e.y, e.x], { icon: createIcon(e.type) });
+    m.on('dblclick', () => openDetail(e));
+    m.bindTooltip(`${e.nom} — ${formatNote(e.note)}`, { direction: 'top', offset: [0, -10] });
+    markersCluster.addLayer(m);
+  });
+  statsEl.textContent = visible.length + ' / ' + data.length + ' établissement' + (data.length > 1 ? 's' : '');
+}
+
+function getHiddenTypes() {
+  const s = new Set();
+  document.querySelectorAll('.legend-item[data-type].muted').forEach(el => s.add(el.dataset.type));
+  return s;
+}
+
+function filterData() {
+  const q = searchInput.value.trim();
+  const noteMin = noteSelect.value;
+  const type = typeSelect.value;
+  const fokoName = fokonInput.value.trim();
+
+  let promise;
+  if (q) {
+    promise = fetch('/api/etablissements/search?q=' + encodeURIComponent(q)).then(r => r.json());
+  } else if (fokoName) {
+    const foko = allFokontany.find(f => f.nom.toLowerCase() === fokoName.toLowerCase());
+    if (foko) {
+      let url = '/api/etablissements/by-fokontany/' + foko.id;
+      if (type) url += '?type=' + type;
+      promise = fetch(url).then(r => r.json());
+    } else {
+      promise = Promise.resolve([]);
+    }
+  } else if (type || noteMin) {
+    let url = '/api/etablissements';
+    let params = [];
+    if (type) params.push('type=' + type);
+    if (noteMin) params.push('noteMin=' + noteMin);
+    if (params.length) url += '?' + params.join('&');
+    promise = fetch(url).then(r => r.json());
+  } else {
+    promise = Promise.resolve(allEtablissements);
+  }
+
+  promise.then(data => {
+    if (noteMin && !q) {
+      data = data.filter(e => e.note >= parseFloat(noteMin));
+    }
+    updateMarkers(data);
+  });
+}
+
+function showSidebar(id, nom, arr) {
+  document.getElementById('sideTitle').textContent = nom;
+  document.getElementById('sideMeta').textContent = arr;
+  const list = document.getElementById('sideList');
+  list.innerHTML = '<p style="color:#999">Chargement…</p>';
+  document.getElementById('sidebar').classList.add('open');
+
+  fetch('/api/etablissements/by-fokontany/' + id)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.length) {
+        list.innerHTML = '<p style="color:#999">Aucun établissement dans ce fokontany.</p>';
+        return;
+      }
+      list.innerHTML = '<p style="margin-bottom:8px;font-weight:600">' + data.length + ' établissement' + (data.length > 1 ? 's' : '') + '</p>';
+      data.forEach(e => {
+        const div = document.createElement('div');
+        div.className = 'etab-item';
+        div.style.cursor = 'pointer';
+        div.innerHTML = '<span class="name" style="color:' + (e.type === 'restaurant' ? '#e74c3c' : '#3498db') + '">' + e.nom + '</span><span class="note">' + formatNote(e.note) + '</span>';
+        div.addEventListener('dblclick', () => openDetail(e));
+        list.appendChild(div);
+      });
+    });
+}
+
+function resetAll() {
+  searchInput.value = '';
+  noteSelect.value = '';
+  typeSelect.value = '';
+  fokonInput.value = '';
+  filterData();
+  map.setView([-18.91, 47.53], 13);
+  document.getElementById('sidebar').classList.remove('open');
+}
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(filterData, 250);
+});
+noteSelect.addEventListener('change', filterData);
+typeSelect.addEventListener('change', filterData);
+fokonInput.addEventListener('change', filterData);
+
+document.getElementById('resetBtn').addEventListener('click', resetAll);
+document.getElementById('sidebarClose').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.remove('open');
+});
+document.getElementById('modalClose').addEventListener('click', () => {
+  document.getElementById('detailModal').classList.remove('open');
+});
+document.getElementById('detailModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) document.getElementById('detailModal').classList.remove('open');
+});
+
+document.getElementById('satToggle').addEventListener('click', function() {
+  useSat = !useSat;
+  if (useSat) { map.removeLayer(osm); map.addLayer(sat); this.textContent = '🌍 OSM'; }
+  else { map.removeLayer(sat); map.addLayer(osm); this.textContent = '🛰️ Satellite'; }
+});
+
+document.querySelectorAll('.legend-item[data-type]').forEach(el => {
+  el.addEventListener('click', () => {
+    el.classList.toggle('muted');
+    filterData();
+  });
+});
+
+document.getElementById('locBtn').addEventListener('click', () => {
+  if (!navigator.geolocation) return alert('Géolocalisation non disponible');
+  navigator.geolocation.getCurrentPosition(
+    p => { map.setView([p.coords.latitude, p.coords.longitude], 16); },
+    e => alert('Erreur: ' + e.message),
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+});
+
+function formatDist(m) { return m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) + ' m'; }
+function formatTime(s) { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h > 0 ? h + ' h ' + m + ' min' : m + ' min'; }
+
+function clearRoute() {
+  if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+  if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
+  document.getElementById('routePanel').classList.remove('visible');
+  document.getElementById('routeBtn').textContent = '🚗 Itinéraire vers cet établissement';
+  document.getElementById('routeBtn').disabled = false;
+}
+
+function doRoute(startLat, startLng) {
+  const endLat = currentEtab.y, endLng = currentEtab.x;
+  fetch('/api/routing?startLon=' + startLng + '&startLat=' + startLat + '&endLon=' + endLng + '&endLat=' + endLat)
+    .then(r => r.json())
+    .then(data => {
+      if (data.code !== 'Ok' || !data.routes || !data.routes.length) {
+        alert('Aucun itinéraire trouvé');
+        return;
+      }
+      const route = data.routes[0];
+      const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+
+      clearRoute();
+      routeStartMarker = L.marker([startLat, startLng], {
+        icon: L.divIcon({
+          className: '',
+          html: '<div style="width:20px;height:20px;border-radius:50%;background:#27ae60;border:4px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:10px">D</div>',
+          iconSize: [20, 20], iconAnchor: [10, 10]
+        })
+      }).addTo(map);
+      routeLine = L.polyline(coords, { color: '#3388ff', weight: 5, opacity: 0.8 }).addTo(map);
+      map.fitBounds(routeLine.getBounds().pad(0.2));
+
+      const panel = document.getElementById('routePanel');
+      const clr = document.getElementById('routeClearBtn');
+      panel.innerHTML =
+        '<div style="font-weight:600;margin-bottom:6px">🚗 ' + currentEtab.nom + '</div>' +
+        '<div style="color:#555;margin-bottom:4px">Distance : ' + formatDist(route.distance) + '</div>' +
+        '<div style="color:#555;margin-bottom:8px">Durée : ' + formatTime(route.duration) + '</div>';
+      panel.appendChild(clr);
+      panel.classList.add('visible');
+    })
+    .catch(() => alert('Service indisponible (hors ligne)'));
+}
+
+document.getElementById('routeBtn').addEventListener('click', function() {
+  if (!currentEtab) return;
+  pickStartMode = false;
+  document.getElementById('detailModal').classList.remove('open');
+
+  const panel = document.getElementById('routePanel');
+  const clr = document.getElementById('routeClearBtn');
+  panel.innerHTML =
+    '<div style="font-weight:600;margin-bottom:6px">🚗 Choisir le départ</div>' +
+    '<button class="r-choice" id="choicePos" style="display:block;width:100%;padding:8px;margin-bottom:6px;border:none;border-radius:6px;background:#27ae60;color:#fff;cursor:pointer;font-size:13px">📍 Ma position</button>' +
+    '<button class="r-choice" id="choiceMap" style="display:block;width:100%;padding:8px;border:none;border-radius:6px;background:#3388ff;color:#fff;cursor:pointer;font-size:13px">👆 Choisir sur la carte</button>';
+  panel.appendChild(clr);
+  panel.classList.add('visible');
+
+  document.getElementById('choicePos').addEventListener('click', () => {
+    panel.classList.remove('visible');
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        p => doRoute(p.coords.latitude, p.coords.longitude),
+        () => doRoute(-18.91, 47.53),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    } else {
+      doRoute(-18.91, 47.53);
+    }
+  });
+
+  document.getElementById('choiceMap').addEventListener('click', () => {
+    panel.innerHTML =
+      '<div style="font-weight:600;margin-bottom:6px">👆 Cliquez sur la carte pour définir le départ</div>';
+    panel.appendChild(clr);
+    pickStartMode = true;
+    map.getContainer().style.cursor = 'crosshair';
+  });
+});
+
+map.on('click', function(e) {
+  if (!pickStartMode) return;
+  pickStartMode = false;
+  map.getContainer().style.cursor = '';
+  doRoute(e.latlng.lat, e.latlng.lng);
+});
+
+document.getElementById('routeClearBtn').addEventListener('click', clearRoute);
+
+function init() {
+  Promise.all([
+    fetch('/api/fokontany').then(r => r.json()),
+    fetch('/api/etablissements').then(r => r.json())
+  ]).then(([fokontany, etablissements]) => {
+    allFokontany = fokontany;
+    allEtablissements = etablissements;
+
+    const geoJsonFeatures = fokontany.map(f => ({
+      type: 'Feature',
+      properties: { id: f.id, nom: f.nom, arrondissement: f.arrondissement },
+      geometry: JSON.parse(f.polygon)
+    }));
+    fokoLayer.addData({ type: 'FeatureCollection', features: geoJsonFeatures });
+
+    fokontany.sort((a, b) => a.nom.localeCompare(b.nom));
+    const list = document.getElementById('fokonList');
+    fokontany.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.nom;
+      list.appendChild(opt);
+    });
+
+    updateMarkers(etablissements);
+  });
+}
+
+init();
+</script>
+</body>
+</html>

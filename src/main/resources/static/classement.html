@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROJET SIG — Classement</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; background: #f5f6fa; }
+
+nav {
+  background: #2c3e50; color: #fff; display: flex; align-items: center;
+  padding: 0 20px; height: 50px; gap: 24px;
+}
+nav .brand { font-weight: 700; font-size: 18px; }
+nav a { color: #bbb; text-decoration: none; font-size: 14px; }
+nav a:hover, nav a.active { color: #fff; }
+
+.container { max-width: 900px; margin: 0 auto; padding: 30px 20px; }
+h2 { margin-bottom: 20px; color: #2c3e50; }
+
+.filters { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.filters select, .filters input {
+  padding: 7px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
+}
+.filters label { font-weight: 600; font-size: 14px; color: #555; align-self: center; }
+
+table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+th { background: #2c3e50; color: #fff; padding: 12px 14px; text-align: left; font-size: 13px; font-weight: 600; cursor: pointer; }
+th:hover { background: #34495e; }
+td { padding: 10px 14px; border-bottom: 1px solid #eee; font-size: 14px; }
+tr:hover { background: #f8f9fa; }
+.stars { color: #f39c12; }
+.rank { font-weight: 700; color: #888; width: 40px; }
+.type-badge { color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.gold { background: #fff9e6; }
+.silver { background: #f5f5f5; }
+.bronze { background: #fef5e7; }
+
+@media (max-width: 600px) {
+  table { font-size: 13px; }
+  td, th { padding: 8px 10px; }
+}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">  PROJET SIG</span>
+  <a href="/">Carte</a>
+  <a href="/statistiques.html">Statistiques</a>
+  <a href="/classement.html" class="active">Classement</a>
+  <a href="/proximite.html">Proximité</a>
+  <a href="/gestion.html">Gestion</a>
+</nav>
+
+<div class="container">
+  <h2>🏆 Classement des établissements</h2>
+  <div class="filters">
+    <label>Type</label>
+    <select id="typeFilter">
+      <option value="">Tous</option>
+      <option value="restaurant">Restaurant</option>
+      <option value="hotel">Hôtel</option>
+    </select>
+    <label>Note min</label>
+    <select id="noteFilter">
+      <option value="">Toutes</option>
+      <option value="4">4 ★</option>
+      <option value="3">3 ★</option>
+      <option value="2">2 ★</option>
+      <option value="1">1 ★</option>
+    </select>
+    <label>Recherche</label>
+    <input id="searchInput" type="text" placeholder="Nom…" style="min-width:140px">
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Nom</th>
+        <th>Type</th>
+        <th>Note</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+const tbody = document.getElementById('tbody');
+const typeFilter = document.getElementById('typeFilter');
+const noteFilter = document.getElementById('noteFilter');
+const searchInput = document.getElementById('searchInput');
+
+let allData = [];
+let filtered = [];
+
+function render() {
+  const type = typeFilter.value;
+  const noteMin = noteFilter.value ? parseFloat(noteFilter.value) : 0;
+  const q = searchInput.value.toLowerCase().trim();
+
+  filtered = allData.filter(e => {
+    if (type && e.type !== type) return false;
+    if (e.note < noteMin) return false;
+    if (q && !e.nom.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  filtered.sort((a, b) => b.note - a.note || a.nom.localeCompare(b.nom));
+
+  tbody.innerHTML = filtered.map((e, i) => {
+    const cls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
+    return `<tr class="${cls}">
+      <td class="rank">${medal || (i + 1)}</td>
+      <td><strong>${e.nom}</strong></td>
+      <td><span class="type-badge" style="background:${e.type === 'restaurant' ? '#e74c3c' : '#3498db'}">${e.type}</span></td>
+      <td><span class="stars">${'★'.repeat(Math.round(e.note))}${'☆'.repeat(5 - Math.round(e.note))}</span> ${e.note.toFixed(1)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function load() {
+  fetch('/api/etablissements').then(r => r.json()).then(data => {
+    allData = data;
+    render();
+  });
+}
+
+typeFilter.addEventListener('change', render);
+noteFilter.addEventListener('change', render);
+searchInput.addEventListener('input', render);
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROJET SIG — Gestion des données</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; }
+nav {
+  background: #2c3e50; color: #fff; display: flex; align-items: center;
+  padding: 0 20px; height: 50px; gap: 24px; position: relative; z-index: 2000;
+}
+nav .brand { font-weight: 700; font-size: 18px; }
+nav a { color: #bbb; text-decoration: none; font-size: 14px; transition: color .15s; }
+nav a:hover, nav a.active { color: #fff; }
+.container { max-width: 600px; margin: 40px auto; padding: 0 20px; }
+h1 { font-size: 22px; margin-bottom: 24px; }
+.card {
+  background: #fff; border-radius: 10px; padding: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08); margin-bottom: 16px;
+}
+.card h3 { font-size: 15px; color: #555; margin-bottom: 12px; }
+.card p { font-size: 14px; color: #777; margin-bottom: 12px; }
+.btn {
+  padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px;
+  cursor: pointer; color: #fff; font-weight: 600; margin-right: 8px;
+  transition: opacity .15s;
+}
+.btn:hover { opacity: .85; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-danger { background: #e74c3c; }
+.btn-warning { background: #f39c12; }
+.btn-success { background: #27ae60; }
+#status { margin-top: 16px; padding: 12px; border-radius: 6px; display: none; font-size: 14px; }
+#status.ok { display: block; background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+#status.err { display: block; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+#loading { display: none; margin-top: 12px; color: #999; font-style: italic; }
+#loading.visible { display: block; }
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">  PROJET SIG</span>
+  <a href="/">Carte</a>
+  <a href="/statistiques.html">Statistiques</a>
+  <a href="/classement.html">Classement</a>
+  <a href="/proximite.html">Proximité</a>
+  <a href="/gestion.html" class="active">Gestion</a>
+</nav>
+
+<div class="container">
+  <h1>Gestion des données</h1>
+
+  <div class="card">
+    <h3>Fokontany</h3>
+    <p>Vide puis réimporte les fokontany depuis <code>data/quartiers.geojson</code>.</p>
+    <button class="btn btn-warning" id="reloadFoko">🔄 Actualiser les fokontany</button>
+  </div>
+
+  <div class="card">
+    <h3>Établissements</h3>
+    <p>Vide puis réimporte les établissements depuis <code>data/etablissements.csv</code>.</p>
+    <button class="btn btn-warning" id="reloadEtab">🔄 Actualiser les établissements</button>
+  </div>
+
+  <div class="card">
+    <h3>Réimportation complète</h3>
+    <p>Vide puis réimporte les fokontany <strong>et</strong> les établissements.</p>
+    <button class="btn btn-success" id="reload">🔄 Réimporter toutes les données</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="loading">Opération en cours…</div>
+</div>
+
+<script>
+const statusEl = document.getElementById('status');
+const loadingEl = document.getElementById('loading');
+
+function showStatus(msg, ok) {
+  statusEl.textContent = msg;
+  statusEl.className = ok ? 'ok' : 'err';
+  loadingEl.classList.remove('visible');
+}
+
+function post(url, btn) {
+  btn.disabled = true;
+  loadingEl.classList.add('visible');
+  statusEl.style.display = 'none';
+  fetch(url, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      showStatus(data.message || 'OK', data.status === 'ok');
+      btn.disabled = false;
+    })
+    .catch(err => {
+      showStatus('Erreur : ' + err.message, false);
+      btn.disabled = false;
+    });
+}
+
+document.getElementById('reloadFoko').addEventListener('click', function() {
+  post('/api/manage/reload/fokontany', this);
+});
+document.getElementById('reloadEtab').addEventListener('click', function() {
+  post('/api/manage/reload/etablissement', this);
+});
+document.getElementById('reload').addEventListener('click', function() {
+  post('/api/manage/reload', this);
+});
+</script>
+</body>
+</html>
